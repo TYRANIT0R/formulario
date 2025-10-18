@@ -54,12 +54,13 @@ def find_product(product_id: str):
 
 @app.get("/")
 def form():
-    return render_template("form.html", products=PRODUCTS, errors=None, formdata={"tipo_doc": "boleta"})
+    return render_template("form.html", products=PRODUCTS, errors=None, formdata={"tipo_doc": "boleta"}, clp=clp)
 
 @app.post("/boleta")
 def emitir():
+    tipo = (request.form.get("tipo_doc") or "boleta").lower()
     formdata = {
-        "tipo_doc": (request.form.get("tipo_doc") or "boleta").lower(),
+        "tipo_doc": tipo,
         "product_id": request.form.get("product_id"),
         "quantity": request.form.get("quantity", type=int),
         "nombre": (request.form.get("nombre") or "").strip(),
@@ -70,7 +71,7 @@ def emitir():
 
     errors = []
 
-    if formdata["tipo_doc"] not in ("boleta", "factura"):
+    if tipo not in ("boleta", "factura"):
         errors.append("Selecciona Boleta o Factura.")
 
     product = find_product(formdata["product_id"])
@@ -90,7 +91,7 @@ def emitir():
         errors.append("La dirección es obligatoria (mínimo 5 caracteres).")
 
     rut = formdata["rut"]
-    if formdata["tipo_doc"] == "factura":
+    if tipo == "factura":
         if not rut or not validar_rut(rut):
             errors.append("Para Factura el RUT es obligatorio y debe ser válido.")
     else:
@@ -102,20 +103,18 @@ def emitir():
         errors.append("Email inválido (ej: correo@dominio.cl).")
 
     if errors:
-        return render_template("form.html", products=PRODUCTS, errors=errors, formdata=formdata)
+        return render_template("form.html", products=PRODUCTS, errors=errors, formdata=formdata, clp=clp)
 
-    unit_price = product["price"]
-    neto = unit_price * qty
-    iva = math.floor(neto * IVA_RATE + 0.5)
-    total = neto + iva
+    unit_price_gross = product["price"]
+    line_total_gross = unit_price_gross * qty
 
     now = datetime.now()
-    pref = "BOL" if formdata["tipo_doc"] == "boleta" else "FAC"
+    pref = "FAC" if tipo == "factura" else "BOL"
     numero = f"{pref}-{now.strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
     fecha_hora = now.strftime("%d-%m-%Y %H:%M")
 
     doc = {
-        "tipo": "Boleta" if formdata["tipo_doc"] == "boleta" else "Factura",
+        "tipo": "Factura" if tipo == "factura" else "Boleta",
         "numero": numero,
         "fecha_hora": fecha_hora,
         "cliente": {
@@ -127,16 +126,16 @@ def emitir():
         "lineas": [{
             "descripcion": product["name"],
             "cantidad": qty,
-            "precio_unitario": unit_price,
-            "subtotal": neto
+            "precio_unitario": unit_price_gross,
+            "subtotal": line_total_gross
         }],
-        "neto": neto,
-        "iva": iva,
-        "total": total,
+        "neto": product["price"]*0.81,
+        "iva": product["price"]*0.19,
+        "total": product["price"],
     }
 
-    tpl = "boleta.html" if formdata["tipo_doc"] == "boleta" else "factura.html"
+    tpl = "factura.html" if tipo == "factura" else "boleta.html"
     return render_template(tpl, doc=doc, clp=clp)
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=True, host="127.0.0.1", port=5000, use_reloader=False)
