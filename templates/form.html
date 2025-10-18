@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Compra</h1>
+<p class="muted">Elige tu producto e ingresa tus datos para generar la boleta.</p>
+
+{% if error %}<div class="error">{{ error }}</div>{% endif %}
+
+<form method="post" action="/boleta" autocomplete="on">
+  <label for="product_id">Producto *</label>
+  <select id="product_id" name="product_id" required>
+    <option value="" disabled selected>Selecciona un producto</option>
+    {% for p in products %}
+      <option value="{{ p.id }}">{{ p.name }} — $ {{ "{:,}".format(p.price).replace(",", ".") }}</option>
+    {% endfor %}
+  </select>
+
+  <div class="row">
+    <div>
+      <label for="quantity">Cantidad *</label>
+      <input type="number" id="quantity" name="quantity" value="1" min="1" required />
+    </div>
+    <div>
+      <label>&nbsp;</label>
+      <p class="muted">IVA se calcula automáticamente (19%).</p>
+    </div>
+  </div>
+
+  <h3>Datos del cliente</h3>
+  <div class="row">
+    <div>
+      <label for="nombre">Nombre *</label>
+      <input id="nombre" name="nombre" required placeholder="Nombre y Apellido" />
+    </div>
+    <div>
+      <label for="rut">RUT</label>
+      <input id="rut" name="rut" placeholder="12.345.678-9" />
+    </div>
+  </div>
+
+  <div class="row">
+    <div>
+      <label for="email">Email</label>
+      <input id="email" name="email" type="email" placeholder="correo@dominio.cl" />
+    </div>
+    <div>
+      <label for="direccion">Dirección</label>
+      <input id="direccion" name="direccion" placeholder="Calle 123, Comuna" />
+    </div>
+  </div>
+
+  <br />
+  <button class="btn" type="submit">Generar boleta</button>
+</form>
+{% endblock %}

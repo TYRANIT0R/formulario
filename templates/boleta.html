@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="no-print">
+  <a class="btn secondary" href="\/">&larr; Nueva compra</a>
+  &nbsp;
+  <button class="btn" onclick="window.print()">Imprimir / Guardar como PDF</button>
+</div>
+
+<h1>Boleta</h1>
+<p class="muted">N° {{ boleta.numero }} — {{ boleta.fecha_hora }}</p>
+
+<h3>Cliente</h3>
+<table>
+  <tr><th>Nombre</th><td>{{ boleta.cliente.nombre }}</td></tr>
+  <tr><th>RUT</th><td>{{ boleta.cliente.rut or '—' }}</td></tr>
+  <tr><th>Email</th><td>{{ boleta.cliente.email or '—' }}</td></tr>
+  <tr><th>Dirección</th><td>{{ boleta.cliente.direccion or '—' }}</td></tr>
+</table>
+
+<h3>Detalle</h3>
+<table>
+  <thead>
+    <tr>
+      <th>Descripción</th>
+      <th class="right">Cantidad</th>
+      <th class="right">Precio Unitario</th>
+      <th class="right">Subtotal</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for it in boleta.lineas %}
+    <tr>
+      <td>{{ it.descripcion }}</td>
+      <td class="right">{{ it.cantidad }}</td>
+      <td class="right">{{ clp(it.precio_unitario) }}</td>
+      <td class="right">{{ clp(it.subtotal) }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+  <tfoot>
+    <tr><td colspan="3" class="right">Neto</td><td class="right">{{ clp(boleta.neto) }}</td></tr>
+    <tr><td colspan="3" class="right">IVA (19%)</td><td class="right">{{ clp(boleta.iva) }}</td></tr>
+    <tr><td colspan="3" class="right">Total</td><td class="right">{{ clp(boleta.total) }}</td></tr>
+  </tfoot>
+</table>
+
+<p class="muted">Gracias por su compra.</p>
+{% endblock %}
