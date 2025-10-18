@@ -5,7 +5,7 @@ import math
 
 app = Flask(__name__)
 
-# Catálogo simple
+
 PRODUCTS = [
     {"id": "p1", "name": "Producto A", "price": 7990},
     {"id": "p2", "name": "Producto B", "price": 12990},
@@ -47,7 +47,6 @@ def boleta():
     neto = unit_price * qty
     iva = math.floor(neto * IVA_RATE + 0.5)
     total = neto + iva
-
     now = datetime.now()
     boleta_num = f"BOL-{now.strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
     fecha_hora = now.strftime("%d-%m-%Y %H:%M")
@@ -61,7 +60,7 @@ def boleta():
             "email": email,
             "direccion": direccion
         },
-        # usamos 'lineas' (no 'items') para evitar conflicto con dict.items en Jinja
+     
         "lineas": [{
             "descripcion": product["name"],
             "cantidad": qty,
@@ -72,7 +71,6 @@ def boleta():
         "iva": iva,
         "total": total,
     }
-
     return render_template("boleta.html", boleta=boleta, clp=clp)
 
 if __name__ == "__main__":
