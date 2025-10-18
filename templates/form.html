@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
 <h1>Compra</h1>
-<p class="muted">Precios incluyen IVA (19%).</p>
+<p class="muted">Elige tu producto e ingresa tus datos para generar el documento.</p>
 
 {% if errors %}
   <div class="error">
@@ -17,7 +17,7 @@
     <option value="" disabled {% if not formdata.product_id %}selected{% endif %}>Selecciona un producto</option>
     {% for p in products %}
       <option value="{{ p.id }}" {% if formdata.product_id == p.id %}selected{% endif %}>
-        {{ p.name }} — {{ clp(p.price) }}
+        {{ p.name }} — $ {{ "{:,}".format(p.price).replace(",", ".") }}
       </option>
     {% endfor %}
   </select>
@@ -29,7 +29,7 @@
     </div>
     <div>
       <label>&nbsp;</label>
-      <p class="muted">Al emitir verás Neto, IVA y Total.</p>
+      <p class="muted">IVA se calcula automáticamente (19%).</p>
     </div>
   </div>
 
@@ -43,7 +43,8 @@
     </div>
     <div>
       <label for="rut">RUT</label>
-      <input id="rut" name="rut" pattern="^\d{1,2}\.?\d{3}\.?\d{3}-[\dkK]$"
+      <input id="rut" name="rut"
+             pattern="^\d{1,2}\.?\d{3}\.?\d{3}-[\dkK]$"
              value="{{ formdata.rut or '' }}" placeholder="12.345.678-5" />
     </div>
   </div>
@@ -68,4 +69,17 @@
 
   <button class="btn" type="submit">Generar</button>
 </form>
+
+<script>
+  const rut = document.getElementById('rut');
+  function calcDv(num){let m=2,s=0;for(let i=num.length-1;i>=0;i--){s+=parseInt(num[i],10)*m;m=(m===7)?2:m+1}const r=11-(s%11);return r===11?'0':(r===10?'K':String(r))}
+  function formatRut(raw){raw=raw.replace(/[.\s-]/g,'').toUpperCase();if(!raw)return'';const c=raw.slice(0,-1),dv=raw.slice(-1);let f='';for(let i=c.length-1,j=0;i>=0;i--,j++){f=c[i]+f;if(j%3===2&&i!==0)f='.'+f}return f+'-'+dv}
+  function validarRutCliente(el){const v=el.value.replace(/[.\s]/g,'').toUpperCase();if(v===''){el.setCustomValidity('');return true}if(!v.includes('-')){el.setCustomValidity('Agrega el guion del DV');return false}const [cuerpo,dv]=v.split('-');if(!/^\d+$/.test(cuerpo)||!/^[0-9K]$/.test(dv)){el.setCustomValidity('RUT inválido');return false}const ok=calcDv(cuerpo)===dv;el.setCustomValidity(ok?'':'Dígito verificador incorrecto');return ok}
+  if(rut){rut.addEventListener('blur',()=>{rut.value=formatRut(rut.value);validarRutCliente(rut)});rut.addEventListener('input',()=>{rut.setCustomValidity('')})}
+  function getTipo(){const s=document.querySelector('input[name="tipo_doc"]:checked');return s?s.value:'boleta'}
+  function syncRutRequired(){const fac=getTipo()==='factura';rut.required=fac;rut.placeholder=fac?'12.345.678-5 (obligatorio)':'12.345.678-5'}
+  document.querySelectorAll('input[name="tipo_doc"]').forEach(r=>r.addEventListener('change',syncRutRequired))
+  document.addEventListener('DOMContentLoaded',syncRutRequired)
+  document.getElementById('form-compra').addEventListener('submit',(e)=>{if(rut&&!validarRutCliente(rut)){e.preventDefault();rut.reportValidity()}})
+</script>
 {% endblock %}
