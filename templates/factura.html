@@ -6,13 +6,13 @@
   <button class="btn" onclick="window.print()">Imprimir / Guardar como PDF</button>
 </div>
 
-<h1>Boleta</h1>
+<h1>Factura</h1>
 <p class="muted">N° {{ doc.numero }} — {{ doc.fecha_hora }}</p>
 
 <h3>Cliente</h3>
 <table>
-  <tr><th>Nombre</th><td>{{ doc.cliente.nombre }}</td></tr>
-  <tr><th>RUT</th><td>{{ doc.cliente.rut or '—' }}</td></tr>
+  <tr><th>Razón social</th><td>{{ doc.cliente.nombre }}</td></tr>
+  <tr><th>RUT</th><td>{{ doc.cliente.rut }}</td></tr>
   <tr><th>Email</th><td>{{ doc.cliente.email or '—' }}</td></tr>
   <tr><th>Dirección</th><td>{{ doc.cliente.direccion }}</td></tr>
 </table>

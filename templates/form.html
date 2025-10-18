@@ -1,23 +1,31 @@
 {% extends "base.html" %}
 {% block content %}
 <h1>Compra</h1>
-<p class="muted">Elige tu producto e ingresa tus datos para generar la boleta.</p>
+<p class="muted">Elige tu producto e ingresa tus datos para generar el documento.</p>
 
-{% if error %}<div class="error">{{ error }}</div>{% endif %}
+{% if errors %}
+  <div class="error">
+    <ul style="margin:0 0 0 18px;padding:0;">
+      {% for e in errors %}<li>{{ e }}</li>{% endfor %}
+    </ul>
+  </div>
+{% endif %}
 
-<form method="post" action="/boleta" autocomplete="on">
+<form method="post" action="/boleta" autocomplete="on" novalidate id="form-compra">
   <label for="product_id">Producto *</label>
   <select id="product_id" name="product_id" required>
-    <option value="" disabled selected>Selecciona un producto</option>
+    <option value="" disabled {% if not formdata.product_id %}selected{% endif %}>Selecciona un producto</option>
     {% for p in products %}
-      <option value="{{ p.id }}">{{ p.name }} — $ {{ "{:,}".format(p.price).replace(",", ".") }}</option>
+      <option value="{{ p.id }}" {% if formdata.product_id == p.id %}selected{% endif %}>
+        {{ p.name }} — $ {{ "{:,}".format(p.price).replace(",", ".") }}
+      </option>
     {% endfor %}
   </select>
 
   <div class="row">
     <div>
       <label for="quantity">Cantidad *</label>
-      <input type="number" id="quantity" name="quantity" value="1" min="1" required />
+      <input type="number" id="quantity" name="quantity" min="1" required value="{{ formdata.quantity or 1 }}" />
     </div>
     <div>
       <label>&nbsp;</label>
@@ -28,27 +36,50 @@
   <h3>Datos del cliente</h3>
   <div class="row">
     <div>
-      <label for="nombre">Nombre *</label>
-      <input id="nombre" name="nombre" required placeholder="Nombre y Apellido" />
+      <label for="nombre">Nombre / Razón social *</label>
+      <input id="nombre" name="nombre" required minlength="3" maxlength="80"
+             pattern="^[A-Za-zÁÉÍÓÚÑáéíóúñ\s.'-]{3,80}$"
+             value="{{ formdata.nombre or '' }}" placeholder="Nombre y Apellido o Razón social" />
     </div>
     <div>
       <label for="rut">RUT</label>
-      <input id="rut" name="rut" placeholder="12.345.678-9" />
+      <input id="rut" name="rut"
+             pattern="^\d{1,2}\.?\d{3}\.?\d{3}-[\dkK]$"
+             value="{{ formdata.rut or '' }}" placeholder="12.345.678-5" />
     </div>
   </div>
 
   <div class="row">
     <div>
       <label for="email">Email</label>
-      <input id="email" name="email" type="email" placeholder="correo@dominio.cl" />
+      <input id="email" name="email" type="email" value="{{ formdata.email or '' }}" placeholder="correo@dominio.cl" />
     </div>
     <div>
-      <label for="direccion">Dirección</label>
-      <input id="direccion" name="direccion" placeholder="Calle 123, Comuna" />
+      <label for="direccion">Dirección *</label>
+      <input id="direccion" name="direccion" required minlength="5" maxlength="120"
+             value="{{ formdata.direccion or '' }}" placeholder="Calle 123, Comuna" />
     </div>
   </div>
 
-  <br />
-  <button class="btn" type="submit">Generar boleta</button>
+  <h3>Documento</h3>
+  <div style="display:flex; gap:16px; align-items:center; margin:8px 0 12px;">
+    <label><input type="radio" name="tipo_doc" value="boleta" {% if (formdata.tipo_doc or 'boleta') == 'boleta' %}checked{% endif %}> Boleta</label>
+    <label><input type="radio" name="tipo_doc" value="factura" {% if formdata.tipo_doc == 'factura' %}checked{% endif %}> Factura</label>
+  </div>
+
+  <button class="btn" type="submit">Generar</button>
 </form>
+
+<script>
+  const rut = document.getElementById('rut');
+  function calcDv(num){let m=2,s=0;for(let i=num.length-1;i>=0;i--){s+=parseInt(num[i],10)*m;m=(m===7)?2:m+1}const r=11-(s%11);return r===11?'0':(r===10?'K':String(r))}
+  function formatRut(raw){raw=raw.replace(/[.\s-]/g,'').toUpperCase();if(!raw)return'';const c=raw.slice(0,-1),dv=raw.slice(-1);let f='';for(let i=c.length-1,j=0;i>=0;i--,j++){f=c[i]+f;if(j%3===2&&i!==0)f='.'+f}return f+'-'+dv}
+  function validarRutCliente(el){const v=el.value.replace(/[.\s]/g,'').toUpperCase();if(v===''){el.setCustomValidity('');return true}if(!v.includes('-')){el.setCustomValidity('Agrega el guion del DV');return false}const [cuerpo,dv]=v.split('-');if(!/^\d+$/.test(cuerpo)||!/^[0-9K]$/.test(dv)){el.setCustomValidity('RUT inválido');return false}const ok=calcDv(cuerpo)===dv;el.setCustomValidity(ok?'':'Dígito verificador incorrecto');return ok}
+  if(rut){rut.addEventListener('blur',()=>{rut.value=formatRut(rut.value);validarRutCliente(rut)});rut.addEventListener('input',()=>{rut.setCustomValidity('')})}
+  function getTipo(){const s=document.querySelector('input[name="tipo_doc"]:checked');return s?s.value:'boleta'}
+  function syncRutRequired(){const fac=getTipo()==='factura';rut.required=fac;rut.placeholder=fac?'12.345.678-5 (obligatorio)':'12.345.678-5'}
+  document.querySelectorAll('input[name="tipo_doc"]').forEach(r=>r.addEventListener('change',syncRutRequired))
+  document.addEventListener('DOMContentLoaded',syncRutRequired)
+  document.getElementById('form-compra').addEventListener('submit',(e)=>{if(rut&&!validarRutCliente(rut)){e.preventDefault();rut.reportValidity()}})
+</script>
 {% endblock %}
