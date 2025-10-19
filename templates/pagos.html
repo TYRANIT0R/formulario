@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="no-print">
+  <a class="btn secondary" href="/">&larr; Volver</a>
+</div>
+
+<h1>Pago</h1>
+<p class="muted">Revisa el detalle y completa los datos de tu tarjeta.</p>
+
+{% if errors %}
+  <div class="error">
+    <ul style="margin:0 0 0 18px;padding:0;">
+      {% for e in errors %}<li>{{ e }}</li>{% endfor %}
+    </ul>
+  </div>
+{% endif %}
+
+<h3>Resumen</h3>
+<table>
+  <thead>
+    <tr>
+      <th>Descripción</th>
+      <th class="right">Cant.</th>
+      <th class="right">P. Unitario</th>
+      <th class="right">Subtotal</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for it in resumen["items"] %}
+    <tr>
+      <td>{{ it.descripcion }}</td>
+      <td class="right">{{ it.cantidad }}</td>
+      <td class="right">{{ clp(it.precio_unitario) }}</td>
+      <td class="right">{{ clp(it.subtotal) }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+  <tfoot>
+    <tr><td colspan="3" class="right">Neto</td><td class="right">{{ clp(resumen.neto) }}</td></tr>
+    <tr><td colspan="3" class="right">IVA (19%)</td><td class="right">{{ clp(resumen.iva) }}</td></tr>
+    <tr><td colspan="3" class="right">Total</td><td class="right">{{ clp(resumen.total) }}</td></tr>
+  </tfoot>
+</table>
+
+<h3>Tarjeta</h3>
+<form method="post" action="{{ url_for('pagar') }}" novalidate>
+  <label for="metodo">Método</label>
+  <select id="metodo" name="metodo" required>
+    <option value="" disabled selected>Selecciona...</option>
+    <option value="debito"  {% if pago_prev and pago_prev.metodo=='debito' %}selected{% endif %}>Débito</option>
+    <option value="credito" {% if pago_prev and pago_prev.metodo=='credito' %}selected{% endif %}>Crédito</option>
+  </select>
+
+  <div class="row">
+    <div>
+      <label for="titular">Titular</label>
+      <input id="titular" name="titular" required value="{{ (pago_prev.titular if pago_prev else '') or '' }}">
+    </div>
+    <div>
+      <label for="numero">Número de tarjeta</label>
+      <div style="position:relative">
+        <input id="numero" name="numero" inputmode="numeric" autocomplete="cc-number"
+               placeholder="1234 5678 9012 3456"
+               maxlength="19"
+               value="{{ (pago_prev.numero if pago_prev else '') or '' }}" required>
+        <span id="brand-pill" class="muted"
+              style="position:absolute;right:8px;top:50%;transform:translateY(-50%);
+                     border:1px solid #333;padding:.15rem .5rem;border-radius:999px;font-size:.85rem;">
+          —
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div>
+      <label for="vencimiento">Vencimiento (MM/AA)</label>
+      <input id="vencimiento" name="vencimiento" placeholder="MM/AA"
+             maxlength="5"
+             value="{{ (pago_prev.vencimiento if pago_prev else '') or '' }}" required>
+    </div>
+    <div>
+      <label for="cvv">CVV</label>
+      <input id="cvv" name="cvv" inputmode="numeric" autocomplete="cc-csc"
+             placeholder="3 o 4 dígitos" maxlength="4" required>
+    </div>
+  </div>
+
+  <div id="cuotas-wrap" style="display:none">
+    <label for="cuotas">Cuotas (sólo crédito)</label>
+    <select id="cuotas" name="cuotas">
+      <option value="">Selecciona...</option>
+      <option value="2"  {% if pago_prev and pago_prev.cuotas==2 %}selected{% endif %}>2</option>
+      <option value="3"  {% if pago_prev and pago_prev.cuotas==3 %}selected{% endif %}>3</option>
+      <option value="4"  {% if pago_prev and pago_prev.cuotas==4 %}selected{% endif %}>4</option>
+      <option value="6"  {% if pago_prev and pago_prev.cuotas==6 %}selected{% endif %}>6</option>
+      <option value="12" {% if pago_prev and pago_prev.cuotas==12 %}selected{% endif %}>12</option>
+    </select>
+  </div>
+
+  <div style="margin-top:12px">
+    <button class="btn" type="submit">Confirmar pago</button>
+  </div>
+</form>
+
+<script>
+  const metodoSel = document.getElementById('metodo');
+  const cuotasWrap = document.getElementById('cuotas-wrap');
+
+  function toggleCuotas(){
+    cuotasWrap.style.display = metodoSel.value === 'credito' ? 'block' : 'none';
+  }
+  metodoSel.addEventListener('change', toggleCuotas);
+  toggleCuotas();
+
+  const inputNumero = document.getElementById('numero');
+  const inputVenc   = document.getElementById('vencimiento');
+  const inputCVV    = document.getElementById('cvv');
+  const brandPill   = document.getElementById('brand-pill');
+
+  function detectBrand(digits) {
+    if (/^4/.test(digits)) return 'VISA';
+    if (/^(5[1-5])/.test(digits) || /^(222[1-9]|22[3-9]\d|2[3-6]\d{2}|27[01]\d|2720)/.test(digits)) return 'Mastercard';
+    if (/^3[47]/.test(digits)) return 'AMEX';
+    return '';
+  }
+
+  function formatByBrand(digits, brand) {
+    if (brand === 'AMEX') {
+      digits = digits.slice(0, 15);
+      const g1 = digits.slice(0, 4);
+      const g2 = digits.slice(4, 10);
+      const g3 = digits.slice(10, 15);
+      return [g1, g2, g3].filter(Boolean).join(' ');
+    } else {
+      digits = digits.slice(0, 16);
+      return digits.replace(/(\d{4})(?=\d)/g, '$1 ').trim();
+    }
+  }
+
+  function updateNumberMaxLength(brand) {
+    inputNumero.maxLength = (brand === 'AMEX') ? 17 : 19;
+  }
+
+  function updateCVVForBrand(brand) {
+    inputCVV.maxLength = (brand === 'AMEX') ? 4 : 3;
+    inputCVV.placeholder = (brand === 'AMEX') ? '4 dígitos' : '3 dígitos';
+  }
+
+  function updateBrandUI(brand) {
+    brandPill.textContent = brand || '—';
+    brandPill.style.opacity = brand ? '1' : '0.7';
+  }
+
+  inputNumero.addEventListener('input', (e) => {
+    const raw = e.target.value.replace(/\D/g, '');
+    const brand = detectBrand(raw);
+    updateNumberMaxLength(brand);
+    updateCVVForBrand(brand);
+    const formatted = formatByBrand(raw, brand);
+    e.target.value = formatted;
+    updateBrandUI(brand);
+  });
+
+  window.addEventListener('DOMContentLoaded', () => {
+    const raw = inputNumero.value.replace(/\D/g, '');
+    const brand = detectBrand(raw);
+    updateNumberMaxLength(brand);
+    updateCVVForBrand(brand);
+    inputNumero.value = formatByBrand(raw, brand);
+    updateBrandUI(brand);
+  });
+
+  inputVenc.addEventListener('input', e => {
+    let v = e.target.value.replace(/\D/g, '').slice(0, 4);
+    if (v.length >= 3) v = v.slice(0,2) + '/' + v.slice(2);
+    e.target.value = v;
+  });
+
+  inputVenc.addEventListener('blur', e => {
+    const [mm, yy] = (e.target.value || '').split('/');
+    if (mm && (+mm < 1 || +mm > 12)) {
+      alert('Mes de vencimiento inválido (01-12)');
+      e.target.focus();
+    }
+  });
+</script>
+{% endblock %}

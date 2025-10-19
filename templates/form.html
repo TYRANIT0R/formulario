@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
 <h1>Compra</h1>
-<p class="muted">Elige tu producto e ingresa tus datos para generar el documento.</p>
+<p class="muted">Paso 1 de 2 — Elige tus productos e ingresa tus datos.</p>
 
 {% if errors %}
   <div class="error">
@@ -11,41 +11,77 @@
   </div>
 {% endif %}
 
-<form method="post" action="/boleta" autocomplete="on" novalidate id="form-compra">
-  <label for="product_id">Producto *</label>
-  <select id="product_id" name="product_id" required>
-    <option value="" disabled {% if not formdata.product_id %}selected{% endif %}>Selecciona un producto</option>
-    {% for p in products %}
-      <option value="{{ p.id }}" {% if formdata.product_id == p.id %}selected{% endif %}>
-        {{ p.name }} — $ {{ "{:,}".format(p.price).replace(",", ".") }}
-      </option>
-    {% endfor %}
-  </select>
+<form method="post" action="{{ url_for('continuar_a_pagos') }}" autocomplete="on" novalidate id="form-compra">
 
-  <div class="row">
-    <div>
-      <label for="quantity">Cantidad *</label>
-      <input type="number" id="quantity" name="quantity" min="1" required value="{{ formdata.quantity or 1 }}" />
-    </div>
-    <div>
-      <label>&nbsp;</label>
-      <p class="muted">IVA se calcula automáticamente (19%).</p>
-    </div>
-  </div>
+  <h3>Productos</h3>
+  <table>
+    <thead>
+      <tr>
+        <th style="width:110px;">Seleccionar</th>
+        <th>Producto</th>
+        <th class="right" style="width:120px;">Stock</th>
+        <th class="right" style="width:140px;">Precio</th>
+        <th class="right" style="width:140px;">Cantidad</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in products %}
+      {% set checked = (formdata.selected_ids and p.id in formdata.selected_ids) %}
+      {% set qtyval  = (formdata.qty[p.id] if formdata.qty and p.id in formdata.qty else 1) %}
+      <tr>
+        <td>
+          <label style="display:flex;align-items:center;gap:8px;">
+            <input
+              type="checkbox"
+              name="product_ids"
+              value="{{ p.id }}"
+              class="chk-prod"
+              {% if checked %}checked{% endif %}
+              {% if p.stock <= 0 %}disabled{% endif %}
+            >
+            <span class="muted mono">{{ p.id }}</span>
+          </label>
+        </td>
+        <td>
+          {{ p.name }}
+          {% if p.stock <= 0 %}
+            <span class="muted" style="margin-left:6px;">(sin stock)</span>
+          {% endif %}
+        </td>
+        <td class="right">{{ p.stock }}</td>
+        <td class="right">{{ clp(p.price) }}</td>
+        <td class="right">
+          <input
+            type="number"
+            min="1"
+            max="{{ p.stock if p.stock > 0 else 1 }}"
+            name="qty[{{ p.id }}]"
+            class="qty-prod"
+            data-stock="{{ p.stock }}"
+            style="width:100px;text-align:right"
+            value="{{ qtyval }}"
+            {% if p.stock <= 0 %}disabled{% endif %}
+          >
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="muted">Marca uno o más productos y define su cantidad. El IVA (19%) se calcula en el siguiente paso.</p>
 
   <h3>Datos del cliente</h3>
   <div class="row">
-    <div>
-      <label for="nombre">Nombre / Razón social *</label>
-      <input id="nombre" name="nombre" required minlength="3" maxlength="80"
-             pattern="^[A-Za-zÁÉÍÓÚÑáéíóúñ\s.'-]{3,80}$"
-             value="{{ formdata.nombre or '' }}" placeholder="Nombre y Apellido o Razón social" />
-    </div>
     <div>
       <label for="rut">RUT</label>
       <input id="rut" name="rut"
              pattern="^\d{1,2}\.?\d{3}\.?\d{3}-[\dkK]$"
              value="{{ formdata.rut or '' }}" placeholder="12.345.678-5" />
+    </div>
+    <div>
+      <label for="nombre">Nombre / Razón social *</label>
+      <input id="nombre" name="nombre" required minlength="3" maxlength="80"
+             pattern="^[A-Za-zÁÉÍÓÚÑáéíóúñ\s.'-]{3,80}$"
+             value="{{ formdata.nombre or '' }}" placeholder="Nombre y Apellido o Razón social" />
     </div>
   </div>
 
@@ -67,10 +103,60 @@
     <label><input type="radio" name="tipo_doc" value="factura" {% if formdata.tipo_doc == 'factura' %}checked{% endif %}> Factura</label>
   </div>
 
-  <button class="btn" type="submit">Generar</button>
+  <button class="btn" type="submit">Pagar</button>
 </form>
 
 <script>
+  const chkInputs = Array.from(document.querySelectorAll('.chk-prod'));
+  const qtyInputs = Array.from(document.querySelectorAll('.qty-prod'));
+
+  function syncQtyDisabled() {
+    const rows = document.querySelectorAll('tbody tr');
+    rows.forEach(row => {
+      const chk = row.querySelector('.chk-prod');
+      const qty = row.querySelector('.qty-prod');
+      if (!chk || !qty) return;
+
+      const stock = parseInt(qty.dataset.stock || '0', 10);
+      if (stock <= 0) {
+        chk.checked = false;
+        chk.disabled = true;
+        qty.disabled = true;
+        qty.style.opacity = '0.6';
+        return;
+      }
+
+      qty.disabled = !chk.checked;
+      qty.style.opacity = chk.checked ? '1' : '0.6';
+
+      qty.max = String(stock);
+      if (parseInt(qty.value || '0', 10) > stock) {
+        qty.value = stock;
+      }
+    });
+  }
+
+  chkInputs.forEach(chk => {
+    chk.addEventListener('change', syncQtyDisabled);
+  });
+
+  qtyInputs.forEach(qty => {
+    qty.addEventListener('input', (e) => {
+      let val = parseInt(e.target.value || '0', 10);
+      const stock = parseInt(e.target.dataset.stock || '0', 10);
+      if (val < 1) val = 1;
+      if (stock > 0 && val > stock) val = stock;
+      e.target.value = val;
+
+      const row = e.target.closest('tr');
+      const chk = row.querySelector('.chk-prod');
+      if (chk && !chk.checked) chk.checked = true;
+      syncQtyDisabled();
+    });
+  });
+
+  document.addEventListener('DOMContentLoaded', syncQtyDisabled);
+
   const rut = document.getElementById('rut');
   function calcDv(num){let m=2,s=0;for(let i=num.length-1;i>=0;i--){s+=parseInt(num[i],10)*m;m=(m===7)?2:m+1}const r=11-(s%11);return r===11?'0':(r===10?'K':String(r))}
   function formatRut(raw){raw=raw.replace(/[.\s-]/g,'').toUpperCase();if(!raw)return'';const c=raw.slice(0,-1),dv=raw.slice(-1);let f='';for(let i=c.length-1,j=0;i>=0;i--,j++){f=c[i]+f;if(j%3===2&&i!==0)f='.'+f}return f+'-'+dv}
